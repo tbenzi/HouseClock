@@ -7,7 +7,9 @@ Ogni colnna di finestre rappresenta uha cifra in binario, il bit di peso maggior
 è in alto
 La somma del peso corrispondente alle finestre accese fornisce il valore della cifra
 
-*                       .------------------------------.    peso
+```
+
+                        .------------------------------.    peso
                         |                              |
                         |  .---.  .---.  .---.  .---.  |
                         |  |   |  |   |  |   |  |   |  |     8
@@ -35,6 +37,8 @@ ore    colonna delle decine -'      |      |      |
        colonna delle unità  --------'      |      |
 minuti colonna delle decine ---------------'      |
        colonna delle unità  ----------------------'
+       
+```
 
 Esempio: 16:59 (le X corrispondono ai led accesi, - a led spenti)
 
