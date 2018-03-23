@@ -547,64 +547,6 @@ myDayDST dayDST[] = {
 //
 // ###################################################################################################
 
-// BOZZA DI ROUTINE DI VISUALIZZAZIONE
-
-#define NCOLONNE 4
-#define NRIGHE 4
-
-int ore;
-int minuti;
-int ore_minuti[NCOLONNE];
-
-int nrigaxcolonna[NCOLONNE] = {1,4,4,4};
-
-// con modulo e divisione recupero decine ed unità dai valori di ore e minuti
-ore_minuti[0] = ore / 10;       // ore decine
-ore_minuti[1] = ore % 10;       // ore unità
-ore_minuti[2] = minuti / 10;    // minuti decine
-ore_minuti[3] = minuti % 10;    // minuti unità
-
-
-// for sulle colonne in modo da calcolare l'accensione dei led di una colonna per volta
-for (int colonna = 0; colonna < NCOLONNE; riga++)
-{
-    // for sulle righe partendo dal basso dove c'è il led che identifica il bit meno significativo
-    for (int riga = nrigaxcolonna[colonna] -1; riga >= 0; riga--)
-    {
-        // facendo l'AND bit a bit con 1 ottengo il valore del bit meno significativo che
-        // corrisponde al led acceso / spento
-        led[(colonna * NRIGHE) - riga].bOut = (ore_minuti[riga] && 1) == 1;
-        // per passare al bit successivo faccio uno shift a destra di una posizione del valore
-        ore_minuti[riga] = ore_minuti[riga] >> 1;
-    }
-}
-
-/* calcolo dell'indice del vettore Led -> indice = (colonna * NRIGHE) - riga
-colonna = 0
-    riga = 0   = 0 x 4 + 0       //	LED_1_DEC_ORE,	  0   meno significativo
-                     
-colonna = 1          
-    riga = 0   = 1 x 4 - 3 = 1   //	LED_1_UNI_ORE,    1   meno significativo
-    riga = 1   = 1 x 4 - 2 = 2   //	LED_2_UNI_ORE,    2   
-    riga = 2   = 1 x 4 - 1 = 3   //	LED_4_UNI_ORE,    3
-    riga = 3   = 1 x 4 - 0 = 4   //	LED_8_UNI_ORE,    4   più significativo
-                     
-colonna = 2          
-    riga = 0   = 2 x 4 - 3 = 5   //	LED_1_DEC_MIN,    5   meno significativo
-    riga = 1   = 2 x 4 - 2 = 6   //	LED_2_DEC_MIN,    6
-    riga = 2   = 2 x 4 - 1 = 7   //	LED_4_DEC_MIN,    7
-    riga = 3   = 2 x 4 - 0 = 8   //	LED_8_DEC_MIN,    8   più significativo
-                     
-colonna = 3          
-    riga = 0   = 3 x 4 - 3 = 9   //	LED_1_UNI_MIN,    9   meno significativo
-    riga = 1   = 3 x 4 - 2 = 10  //	LED_2_UNI_MIN,   10
-    riga = 2   = 3 x 4 - 1 = 11  //	LED_4_UNI_MIN,   11
-    riga = 3   = 3 x 4 - 0 = 12  //	LED_8_UNI_MIN,   12   più significativo
-                
-*/
-
-
-    
     
 /* ***************************************************************************************
   lettura degli input
@@ -1727,7 +1669,7 @@ void ManageAllSerialCommand(bool bSerial)
 
 /* =======================================================================================
    =======================================================================================
-	Gestione WORD CLOCK
+	Gestione HOUSE CLOCK
    =======================================================================================
    ======================================================================================= */
 
@@ -1737,7 +1679,7 @@ void ManageAllSerialCommand(bool bSerial)
 	in STANDARD_MODE i valori delle ore arrivano a 12
 	in SET_ClOCK_MODE i valori delle ore arrivano a 24
  * **************************************************************************************/
-void CalcWordClock(byte vminute, byte vhour)
+void CalcHouseClock(byte vminute, byte vhour)
 {
 	boolean bPM;
 
@@ -1752,93 +1694,60 @@ void CalcWordClock(byte vminute, byte vhour)
 		pLed->bOut = false;
 	}
 
-	Led[LED_DST].bOut = NowInDST();
+    // BOZZA DI ROUTINE DI VISUALIZZAZIONE
+    
+    #define NCOLONNE 4
+    #define NRIGHE 4
+    
+    byte ore_minuti[NCOLONNE];
+    
+    byte nrigaxcolonna[NCOLONNE] = {1,4,4,4};
+    
+    // con modulo e divisione recupero decine ed unità dai valori di ore e minuti
+    ore_minuti[0] = vhour / 10;       // ore decine
+    ore_minuti[1] = vhour % 10;       // ore unità
+    ore_minuti[2] = vminute / 10;    // minuti decine
+    ore_minuti[3] = vminute % 10;    // minuti unità
+    
+    // for sulle colonne in modo da calcolare l'accensione dei led di una colonna per volta
+    for (int colonna = 0; colonna < NCOLONNE; riga++)
+    {
+        // for sulle righe partendo dal basso dove c'è il led che identifica il bit meno significativo
+        for (int riga = nrigaxcolonna[colonna] -1; riga >= 0; riga--)
+        {
+            // facendo l'AND bit a bit con 1 ottengo il valore del bit meno significativo che
+            // corrisponde al led acceso / spento
+            pLed[(colonna * NRIGHE) - riga].bOut = (ore_minuti[riga] && 1) == 1;
+            // per passare al bit successivo faccio uno shift a destra di una posizione del valore
+            ore_minuti[riga] = ore_minuti[riga] >> 1;
+        }
+    }
 
-	// led da accendere in funzione del valore dei minuti attuali
-	byte led = lightOnMinutes[vminute].led;
-	if (led == 255)
-	{
-		Led[LED_TWENTY].bOut   = true;
-		Led[LED_FIVE_MIN].bOut = true;
-	}
-	else if(led != 254) // solo led puntini
-	{
-		Led[led].bOut = true;
-	}
-	// accensione del led MINUTES in funzione del valore dei minuti attuali
-	Led[LED_MINUTES].bOut = lightOnMinutes[vminute].ledMinutes;
+/* calcolo dell'indice del vettore Led -> indice = (colonna * NRIGHE) - riga
+colonna = 0
+    riga = 0   = 0 x 4 + 0       //	LED_1_DEC_ORE,	  0   meno significativo
+                     
+colonna = 1          
+    riga = 0   = 1 x 4 - 3 = 1   //	LED_1_UNI_ORE,    1   meno significativo
+    riga = 1   = 1 x 4 - 2 = 2   //	LED_2_UNI_ORE,    2   
+    riga = 2   = 1 x 4 - 1 = 3   //	LED_4_UNI_ORE,    3
+    riga = 3   = 1 x 4 - 0 = 4   //	LED_8_UNI_ORE,    4   più significativo
+                     
+colonna = 2          
+    riga = 0   = 2 x 4 - 3 = 5   //	LED_1_DEC_MIN,    5   meno significativo
+    riga = 1   = 2 x 4 - 2 = 6   //	LED_2_DEC_MIN,    6
+    riga = 2   = 2 x 4 - 1 = 7   //	LED_4_DEC_MIN,    7
+    riga = 3   = 2 x 4 - 0 = 8   //	LED_8_DEC_MIN,    8   più significativo
+                     
+colonna = 3          
+    riga = 0   = 3 x 4 - 3 = 9   //	LED_1_UNI_MIN,    9   meno significativo
+    riga = 1   = 3 x 4 - 2 = 10  //	LED_2_UNI_MIN,   10
+    riga = 2   = 3 x 4 - 1 = 11  //	LED_4_UNI_MIN,   11
+    riga = 3   = 3 x 4 - 0 = 12  //	LED_8_UNI_MIN,   12   più significativo
+                
+*/
 
-	if ((mode == SET_CLOCK_MODE) && bWriteOnSerial)
-	{
-		char txt[64];
-		sprintf(txt, "%2d:%2d -> ", vhour, vminute);
-		Serial.print (txt);
-	}
 
-	bPM = (vhour > 12);
-	if (bPM)
-	{
-		vhour = vhour - 12;
-	}
-	// controllo per accensione led PAST e TO
-	if (vminute > 4)
-	{
-		if (vminute <= 34)
-		{
-			Led[LED_PAST].bOut = true;
-		}
-		else
-		{
-			Led[LED_TO].bOut = true;
-			vhour++;
-			if (vhour > 12)
-			{
-				vhour = 1;
-			}
-		}
-	}
-
-	// accensione del led delle ore
-	Led[LED_ONE + vhour - 1].bOut = true;
-
-	if (vminute == 0)
-	{
-		Led[LED_OCLOCK].bOut = true;
-	}
-
-	// accensione dei led puntini
-	switch (lightOnMinutes[vminute].numDots)
-	{
-		case 0: break;
-		case 1:
-			Led[LED_DOT1].bOut = true;
-			break;
-		case 2:
-			Led[LED_DOT1].bOut = true;
-			Led[LED_DOT2].bOut = true;
-			break;
-		case 3:
-			Led[LED_DOT1].bOut = true;
-			Led[LED_DOT2].bOut = true;
-			Led[LED_DOT3].bOut = true;
-			break;
-		case 4:
-			Led[LED_DOT1].bOut = true;
-			Led[LED_DOT2].bOut = true;
-			Led[LED_DOT3].bOut = true;
-			Led[LED_DOT4].bOut = true;
-			break;
-	}
-	if (mode == SET_CLOCK_MODE)
-	{
-		Led[LED_AM].bOut = !bPM;
-		Led[LED_PM].bOut = bPM;
-	}
-	else
-	{
-		Led[LED_AM].bOut = !PM;
-		Led[LED_PM].bOut = PM;
-	}
 }
 
 /* =======================================================================================
