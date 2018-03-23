@@ -229,19 +229,19 @@
 
 // indici dei led
 enum E_LED {
-	LED_1_DEC_ORE,	//  0
-	LED_8_UNI_ORE,  //  1
-	LED_4_UNI_ORE,  //  2
-	LED_2_UNI_ORE,  //  3
-	LED_1_UNI_ORE,  //  4
-	LED_8_DEC_MIN,  //  5
-	LED_4_DEC_MIN,  //  6
-	LED_2_DEC_MIN,  //  7
-	LED_1_DEC_MIN,  //  8
-	LED_8_UNI_MIN,  //  9
-	LED_4_UNI_MIN,  // 10
-	LED_2_UNI_MIN,  // 11
-	LED_1_UNI_MIN,  // 12
+	LED_1_DEC_ORE,	//  0   meno significativo
+	LED_1_UNI_ORE,  //  1   meno significativo
+	LED_2_UNI_ORE,  //  2   
+	LED_4_UNI_ORE,  //  3
+	LED_8_UNI_ORE,  //  4   più significativo
+	LED_1_DEC_MIN,  //  5   meno significativo
+	LED_2_DEC_MIN,  //  6
+	LED_4_DEC_MIN,  //  7
+	LED_8_DEC_MIN,  //  8   più significativo
+	LED_1_UNI_MIN,  //  9   meno significativo
+	LED_2_UNI_MIN,  // 10
+	LED_4_UNI_MIN,  // 11
+	LED_8_UNI_MIN,  // 12   più significativo
 	NUM_LED         // 13
 };
 
@@ -556,7 +556,7 @@ int ore;
 int minuti;
 int ore_minuti[NCOLONNE];
 
-int led [NRIGHE][NCOLONNE];
+int nrigaxcolonna[NCOLONNE] = {1,4,4,4};
 
 // con modulo e divisione recupero decine ed unità dai valori di ore e minuti
 ore_minuti[0] = ore / 10;       // ore decine
@@ -569,17 +569,43 @@ ore_minuti[3] = minuti % 10;    // minuti unità
 for (int colonna = 0; colonna < NCOLONNE; riga++)
 {
     // for sulle righe partendo dal basso dove c'è il led che identifica il bit meno significativo
-    for (int riga = NRIGHE-1; riga >= 0 ; riga--)
+    for (int riga = nrigaxcolonna[colonna] -1; riga >= 0; riga--)
     {
         // facendo l'AND bit a bit con 1 ottengo il valore del bit meno significativo che
         // corrisponde al led acceso / spento
-        led[riga][colonna] = ore_minuti[riga] && 1;
+        led[(colonna * NRIGHE) - riga].bOut = (ore_minuti[riga] && 1) == 1;
         // per passare al bit successivo faccio uno shift a destra di una posizione del valore
         ore_minuti[riga] = ore_minuti[riga] >> 1;
     }
 }
 
+/* calcolo dell'indice del vettore Led -> indice = (colonna * NRIGHE) - riga
+colonna = 0
+    riga = 0   = 0 x 4 + 0       //	LED_1_DEC_ORE,	  0   meno significativo
+                     
+colonna = 1          
+    riga = 0   = 1 x 4 - 3 = 1   //	LED_1_UNI_ORE,    1   meno significativo
+    riga = 1   = 1 x 4 - 2 = 2   //	LED_2_UNI_ORE,    2   
+    riga = 2   = 1 x 4 - 1 = 3   //	LED_4_UNI_ORE,    3
+    riga = 3   = 1 x 4 - 0 = 4   //	LED_8_UNI_ORE,    4   più significativo
+                     
+colonna = 2          
+    riga = 0   = 2 x 4 - 3 = 5   //	LED_1_DEC_MIN,    5   meno significativo
+    riga = 1   = 2 x 4 - 2 = 6   //	LED_2_DEC_MIN,    6
+    riga = 2   = 2 x 4 - 1 = 7   //	LED_4_DEC_MIN,    7
+    riga = 3   = 2 x 4 - 0 = 8   //	LED_8_DEC_MIN,    8   più significativo
+                     
+colonna = 3          
+    riga = 0   = 3 x 4 - 3 = 9   //	LED_1_UNI_MIN,    9   meno significativo
+    riga = 1   = 3 x 4 - 2 = 10  //	LED_2_UNI_MIN,   10
+    riga = 2   = 3 x 4 - 1 = 11  //	LED_4_UNI_MIN,   11
+    riga = 3   = 3 x 4 - 0 = 12  //	LED_8_UNI_MIN,   12   più significativo
+                
+*/
 
+
+    
+    
 /* ***************************************************************************************
   lettura degli input
   aggiornamento dei fronti di salita e di discesa e del tempo di permanenza
