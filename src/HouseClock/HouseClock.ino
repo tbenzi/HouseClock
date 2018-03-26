@@ -303,26 +303,6 @@ myLed Led[NUM_LED] = {
 	{" 1um",  38, false, false, false},   // 12  LED_1_UNI_MIN
 };
 
-// definizioni per macchina a stati generica --------------------------
-//
-typedef void    (*myStatusFunc)();
-typedef void    (*myDropOutFunc)();
-typedef void    (*myPickUpFunc)();
-typedef int     (*myChangeStatusFunc)();
-
-struct myStatus {
-	myStatusFunc       pStatus;           // ptr a funzione di stato -             può essere nullptr
-	myDropOutFunc      pDropOut;          // ptr a funzione uscita dallo stato -   può essere nullptr
-	myPickUpFunc       pPickUp;           // ptr a funzione ingresso nello stato - può essere nullptr
-	myChangeStatusFunc pChangeStatus;     // ptr a funzione cambio stato -         OBBLIGATORIA
-	unsigned int       msInStatus;        // millisecondi di permanenza nello stato
-	unsigned int       maxMsInStatus;     // massima permanenza nello stato
-	boolean            bmaxMsInStatus;    // flag superata la massima permanenza nello stato
-	const char*        associateString;   // testo descrizione dello stato (per stampe)
-};
-//
-// --------------------------------------------------------------------
-
 // --------------------------------------------------------------------
 // modi di funzionamento
 typedef enum E_MODE {
@@ -332,27 +312,8 @@ typedef enum E_MODE {
 	NUM_MODE
 } ENUM_MODE;
 
-// Prototipi delle funzioni per la gestione degli stati
-void StandardModeStatus();
-void StandardModePickUp();
-ENUM_MODE StandardModeChangeStatus();
+CStateMachine States;
 
-void SetClockModeStatus();
-void SetClockModePickUp ();
-void SetClockModeDropOut ();
-ENUM_MODE SetClockModeChangeStatus();
-
-void LedTestModeStatus();
-void LedTestModePickUp ();
-ENUM_MODE LedTestModeChangeStatus();
-
-// definizione ed inizializzazione degli stati
-myStatus Status[NUM_MODE] = {
-//  pStatus              pDropOut             pPickUp             pChange                                       msInStatus  maxMsInStatus bmaxMsInStatus associate string
-	{StandardModeStatus, nullptr,             StandardModePickUp, (myChangeStatusFunc)StandardModeChangeStatus, 0,          0,            false,         "STANDARD_MODE"},  // STANDARD_MODE
-	{SetClockModeStatus, SetClockModeDropOut, SetClockModePickUp, (myChangeStatusFunc)SetClockModeChangeStatus, 0,          60000,        false,         "SET_CLOCK_MODE"}, // SET_CLOCK_MODE
-	{LedTestModeStatus,  nullptr,             LedTestModePickUp,  (myChangeStatusFunc)LedTestModeChangeStatus,  0,          60000,        false,         "LED_TEST_MODE"},  // LED_TEST_MODE
-};
 //
 // --------------------------------------------------------------------
 
@@ -365,24 +326,8 @@ typedef enum E_SETCLOCK_SUBSTATUS {
 	NUM_SETCLOCK_SUBSTATUS
 } ENUM_SETCLOCK_SUBSTATUS;
 
-// Prototipi delle funzioni per la gestione dei sottostati
-void SetHourStatus();
-ENUM_SETCLOCK_SUBSTATUS SetHourChangeStatus();
+CStateMachine SetClockSubStates;
 
-void SetMinutesStatus();
-void SetMinutesPickUp ();
-ENUM_SETCLOCK_SUBSTATUS SetMinutesChangeStatus();
-
-void SetFinishPickUp ();
-ENUM_SETCLOCK_SUBSTATUS SetFinishChangeStatus();
-
-// definizione ed inizializzazione degli stati
-myStatus SetClockSubStatus[NUM_SETCLOCK_SUBSTATUS] = {
-//  pStatus         pDropOut    pPickUp             pChange                                 msInStatus  maxMsInStatus bmaxMsInStatus associate string
-	{SetHourStatus,    nullptr,    nullptr,            (myChangeStatusFunc)SetHourChangeStatus,    0,          0,          false,      "SET_HOUR"},    // SET_HOUR
-	{SetMinutesStatus, nullptr,    SetMinutesPickUp,   (myChangeStatusFunc)SetMinutesChangeStatus, 0,          0,          false,      "SET_MINUTES"}, // SET_MINUTES
-	{nullptr,          nullptr,    SetFinishPickUp,    (myChangeStatusFunc)SetFinishChangeStatus,  0,          0,          false,      "LED_FINISH"},  // LED_FINISH
-};
 //
 // --------------------------------------------------------------------
 
@@ -640,7 +585,8 @@ void WriteOutput ()
 	if (bWriteOnSerial)
 	{
 		char txt [64];
-		Serial.print(Status[mode].associateString);
+//		Serial.print(Status[mode].associateString);
+		Serial.print(States.GetStatusName());
 		Serial.print(" - ");
 		if (mode != LED_TEST_MODE)
 		{
@@ -660,7 +606,8 @@ void WriteOutput ()
 			}
 		}
 		Serial.print("\n");
-		sprintf (txt, "*#WordClock - %s *", Status[mode].associateString);
+//		sprintf (txt, "*#WordClock - %s *", Status[mode].associateString);
+		sprintf (txt, "*#WordClock - %s *", States.GetStatusName());
 		bluetooth.print(txt);
 	}
 }
@@ -816,8 +763,8 @@ void ShowDateTimeOnSerial()
    ======================================================================================= */
  void ResetCouterAndFlag()
  {
-	Status[mode].msInStatus = 0;
-	Status[mode].bmaxMsInStatus = false;
+// !!!!!!!!!!!!!	Status[mode].msInStatus = 0;
+// !!!!!!!!!!!!!	Status[mode].bmaxMsInStatus = false;
  }
 
 /* =======================================================================================
@@ -830,7 +777,7 @@ void ShowDateTimeOnSerial()
 	Ad ogni ciclo di refresch aggiorna i valori di ore e minuti leggendo l'RTC
 	Calcola i led da accendere in funzione del valore di ore e minuti
  * ***************************************************************************************/
-void StandardModeStatus()
+void StandardModeStatus(void* pStructData)
 {
 	if (bRefreshCycle)
 	{
@@ -842,7 +789,7 @@ void StandardModeStatus()
 /* ***************************************************************************************
 	Gestione ingresso nello stato STANDARD_MODE
  * **************************************************************************************/
-void StandardModePickUp()
+void StandardModePickUp(void* pStructData)
 {
 	ResetCouterAndFlag();
 	bChangeToSTANDARD_MODE = false;
@@ -854,7 +801,7 @@ void StandardModePickUp()
 	in modalità SET_CLOCK
 	permendo il pulsante SET o ricevendo il comando "ET" da seriale si entra in LED_TEST
  * ***************************************************************************************/
-ENUM_MODE StandardModeChangeStatus()
+int StandardModeChangeStatus(void* pStructData)
 {
 	if ((Puls[PULS_MODE].bRiseEdge || Puls[PULS_MODE].bIn))
 	{
@@ -931,7 +878,7 @@ byte IncDecValue(byte value, byte maxVal)
 {
 	if (Puls[PULS_NEXT_HM].bRiseEdge)
 	{
-		Status[mode].msInStatus = 0;
+// !!!!!!!!!!!		Status[mode].msInStatus = 0;
 		value++;
 		if (value >= maxVal)
 		{
@@ -940,7 +887,7 @@ byte IncDecValue(byte value, byte maxVal)
 	}
 	else if (Puls[PULS_PREV_HM].bRiseEdge)
 	{
-		Status[mode].msInStatus = 0;
+// !!!!!!!!!!!		Status[mode].msInStatus = 0;
 		value--;
 		if (value == 255)
 		{
@@ -954,7 +901,7 @@ byte IncDecValue(byte value, byte maxVal)
 	Gestione stato SET_HOUR
 	incrementa o decerementa il valore dell'ora
  * **************************************************************************************/
-void SetHourStatus()
+void SetHourStatus(void* pStructData)
 {
 	setHours = IncDecValue(setHours, 24);
 }
@@ -963,7 +910,7 @@ void SetHourStatus()
 	Gestione cambio stato SET_HOUR
 	premendo il pulsate SET si passa ad impostare i minuti
  * **************************************************************************************/
-ENUM_SETCLOCK_SUBSTATUS SetHourChangeStatus()
+int SetHourChangeStatus(void* pStructData)
 {
 	if (Puls[PULS_SET].bRiseEdge)
 	{
@@ -976,7 +923,7 @@ ENUM_SETCLOCK_SUBSTATUS SetHourChangeStatus()
 	Gestione stato SET_MINUTES
 	incrementa o decerementa il valore dei minuti
  * **************************************************************************************/
-void SetMinutesStatus()
+void SetMinutesStatus(void* pStructData)
 {
 	setMin = IncDecValue(setMin, 60);
 }
@@ -985,16 +932,16 @@ void SetMinutesStatus()
 	Gestione ingresso nello stato SET_MINUTES
 	azzera il contatore di permanenza nello stato SET_CLOCL_MODE
  * **************************************************************************************/
-void SetMinutesPickUp ()
+void SetMinutesPickUp (void* pStructData)
 {
-	Status[mode].msInStatus = 0;
+	// !!!!!!!!!!!!!!! Status[mode].msInStatus = 0;
 }
 
 /* ***************************************************************************************
 	Gestione cambio stato SET_MINUTES
 	premendo il pulsate SET si passa nello stato FINISH dove si imposta l'RTC
  * **************************************************************************************/
-ENUM_SETCLOCK_SUBSTATUS SetMinutesChangeStatus()
+int SetMinutesChangeStatus(void* pStructData)
 {
 	if (Puls[PULS_SET].bRiseEdge)
 	{
@@ -1006,7 +953,7 @@ ENUM_SETCLOCK_SUBSTATUS SetMinutesChangeStatus()
 /* ***************************************************************************************
 	Gestione ingresso nello stato SET_FINISH
  * **************************************************************************************/
-void SetFinishPickUp()
+void SetFinishPickUp(void* pStructData)
 {
 	bLedBlink = false;
 	bToSet = true;
@@ -1015,7 +962,7 @@ void SetFinishPickUp()
 /* ***************************************************************************************
 	Gestione cambio stato SET_FINISH
  * **************************************************************************************/
-ENUM_SETCLOCK_SUBSTATUS SetFinishChangeStatus()
+int SetFinishChangeStatus(void* pStructData)
 {
 	return SET_FINISH;
 }
@@ -1026,7 +973,7 @@ ENUM_SETCLOCK_SUBSTATUS SetFinishChangeStatus()
 	gestisce il set di ore e minuti (macchina a stati)
 	calcola i led da accendere in funzione dei valori di ore e minuti che si stanno impostando
  * **************************************************************************************/
-void SetClockModeStatus()
+void SetClockModeStatus(void* pStructData)
 {
 	register myLed* pLed = &Led[0];
 
@@ -1035,7 +982,10 @@ void SetClockModeStatus()
 		BlinkSettingLed();
 	}
 
-	StateMachine(SetClockSubStatus, (int&)setClockSubStatus, (int&)oldsSetClockSubStatus);
+	oldsSetClockSubStatus = SetClockSubStates.GetStatusInd();
+	SetClockSubStates.Manage();
+	setClockSubStatus = SetClockSubStates.GetStatusInd();
+//	StateMachine(SetClockSubStatus, (int&)setClockSubStatus, (int&)oldsSetClockSubStatus);
 
 	CalcWordClock(setMin, setHours);
 
@@ -1048,7 +998,7 @@ void SetClockModeStatus()
 /* ***************************************************************************************
 	Gestione ingresso nello stato SET_CLOCK_MODE
  * **************************************************************************************/
-void SetClockModePickUp ()
+void SetClockModePickUp (void* pStructData)
 {
 	register myLed* pLed = &Led[0];
 
@@ -1071,7 +1021,7 @@ void SetClockModePickUp ()
 	imposta l'RTC se deve farlo
 	disabilita il lampeggio dei led
  * **************************************************************************************/
-void SetClockModeDropOut ()
+void SetClockModeDropOut (void* pStructData)
 {
 	if (bToSet)  // devo fare il set di RTC
 	{
@@ -1090,11 +1040,12 @@ void SetClockModeDropOut ()
 	- premendo il pulsnato MODE (non si esegue alcun set di RTC)
 	- è superato il tempo massimo di permanenza nello stato (non si esegue alcun set di RTC)
  * **************************************************************************************/
-ENUM_MODE SetClockModeChangeStatus()
+int SetClockModeChangeStatus(void* pStructData)
 {
 	if ((setClockSubStatus == SET_FINISH) ||
-		Puls[PULS_MODE].bRiseEdge ||
-		Status[SET_CLOCK_MODE].bmaxMsInStatus)
+		Puls[PULS_MODE].bRiseEdge // !!!!!!!!!!! ||
+		// !!!!!!!!!!! Status[SET_CLOCK_MODE].bmaxMsInStatus
+		)
 	{
 		return STANDARD_MODE;
 	}
@@ -1110,7 +1061,7 @@ ENUM_MODE SetClockModeChangeStatus()
    Gestione dello stato LED_TEST_MODE
    Accende, uno alla volta, tutti i led csambiando il led acceso ad ogni clclo di refresh
  * **************************************************************************************/
-void LedTestModeStatus()
+void LedTestModeStatus(void* pStructData)
 {
 	if (!bRefreshCycle)
 	{
@@ -1135,7 +1086,7 @@ void LedTestModeStatus()
 	Gestione ingresso nello stato LED_TEST_MODE
 	spegne tutti i led
  * **************************************************************************************/
-void LedTestModePickUp ()
+void LedTestModePickUp (void* pStructData)
 {
 	register myLed* pLed = &Led[0];
 
@@ -1154,14 +1105,15 @@ void LedTestModePickUp ()
 	se è arrivato comando da seriale o
 	se è passato il tempo massimo nello stato torna a STANDARD_MODE
  * **************************************************************************************/
-ENUM_MODE LedTestModeChangeStatus()
+int LedTestModeChangeStatus(void* pStructData)
 {
 	if (Puls[PULS_MODE].bRiseEdge       ||
 		Puls[PULS_SET].bRiseEdge        ||
 		Puls[PULS_NEXT_HM].bRiseEdge    ||
 		Puls[PULS_PREV_HM].bRiseEdge    ||
-		bChangeToSTANDARD_MODE ||
-		Status[LED_TEST_MODE].bmaxMsInStatus )
+		bChangeToSTANDARD_MODE // !!!!!!!!!!! ||
+		// !!!!!!!!!!! Status[LED_TEST_MODE].bmaxMsInStatus
+		)
 	{
 		return STANDARD_MODE;
 	}
@@ -1286,34 +1238,6 @@ byte ParseToDateTime (bool bSerial)
 }
 
 /* ***************************************************************************************
-   Legge DATA E ORA da bluetooth e controlla i valori letti, se ok return TRUE
- * **************************************************************************************/
-//byte BluetoothParseToDateTime()
-//{
-//    year    = bluetooth.parseInt();
-//    month   = bluetooth.parseInt();
-//    day     = bluetooth.parseInt();
-//    hour    = bluetooth.parseInt();
-//    minute  = bluetooth.parseInt();
-//    second  = bluetooth.parseInt();
-//    return CheckDateAndHourValue(year, month, day, hour, minute, second);
-//}
-
-/* ***************************************************************************************
-   Legge DATA E ORA da seriale e controlla i valori letti, ritorno un eventuale codice di errore
- * **************************************************************************************/
-//byte SerialParseToDateTime()
-//{
-//    year    = Serial.parseInt();
-//    month   = Serial.parseInt();
-//    day     = Serial.parseInt();
-//    hour    = Serial.parseInt();
-//    minute  = Serial.parseInt();
-//    second  = Serial.parseInt();
-//    return CheckDateAndHourValue(year, month, day, hour, minute, second);
-//}
-
-/* ***************************************************************************************
    Controlla se il carattere passato è corretto per il comando SERIAL_CMD_LIGHT_SET
    return true se ok, false altrimenti
  * **************************************************************************************/
@@ -1333,35 +1257,6 @@ bool ParseSetLightLevel(bool bSerial)
 	return false;
 }
 
-/* ***************************************************************************************
-   Legge il valore di duty cycle per il PWM della luminosità dei led
-   return true se ok, false altrimenti
- * **************************************************************************************/
-//bool SerialParseSetLightLevel()
-//{
-//    char c1 = Serial.read();
-//    if (IsCharSetLightLevel(c1))
-//    {
-//        PWM_dutyCycle = Serial.parseInt();
-//        return true;
-//    }
-//    return false;
-//}
-
-/* ***************************************************************************************
-   Legge il valore di duty cycle per il PWM della luminosità dei led
-   return true se ok, false altrimenti
- * **************************************************************************************/
-//bool BluetoothParseSetLightLevel()
-//{
-//    char c1 = bluetooth.read();
-//    if (IsCharSetLightLevel(c1))
-//    {
-//        PWM_dutyCycle = bluetooth.parseInt();
-//        return true;
-//    }
-//    return false;
-//}
 
 /* ***************************************************************************************
    abilita o disabilita il LED TEST in funzine dei valori letti
@@ -1387,26 +1282,6 @@ void ParseLedTestEnable(bool bSerial)
 	char c2 = SerialRead(bSerial);
 	CheckLedTestEnable (c1, c2);
 }
-
-/* ***************************************************************************************
-   abilita o disabilita il LED TEST
- * **************************************************************************************/
-//void SerialParseLedTestEnable()
-//{
-//    char c1 = Serial.read();
-//    char c2 = Serial.read();
-//    CheckLedTestEnable (c1,  c2);
-//}
-
-/* ***************************************************************************************
-   abilita o disabilita il LED TEST
- * **************************************************************************************/
-//void BluetoothParseLedTestEnable()
-//{
-//    char c1 = bluetooth.read();
-//    char c2 = bluetooth.read();
-//    CheckLedTestEnable (c1,  c2);
-//}
 
 void SerialHelp()
 {
@@ -1516,157 +1391,6 @@ void ManageAllSerialCommand(bool bSerial)
 	(bSerial) ? (serialNumLoop = numLoop) : (bluetoothNumLoop = numLoop);
 }
 
-/* ***************************************************************************************
-	Gestione dei comandi da seriale embedded
- * **************************************************************************************/
-//void ManageSerialCommand()
-//{
-//    static byte numLoop = 0;
-//    static byte maxLoop = 5;
-//    // controlli su seriale embedded
-//    switch (CharAvailableOnSerial(true))
-////    switch (Serial.available())
-//    {
-//		int nc;
-////      int nc = Serial.available();
-//        nc = CharAvailableOnSerial(true);
-////        Serial.print("*****");
-////        Serial.println(nc,DEC);
-//        if ((nc > SERIAL_CMD_MAX_LEN) || (numLoop > maxLoop))
-//        {
-////            while (Serial.available())
-//            while (CharAvailableOnSerial(true))
-//            {
-////                 Serial.read();
-//                 SerialRead(true);
-//            }
-//            char txt[64];
-//            sprintf(txt, "flushing %d chararacters", nc);
-//            Serial.println(txt);
-//        }
-//        case SERIAL_CMD_SET_CLOCK: // acquisisce la stringa con data ed ora
-//                numLoop = 0;
-//                byte retCode;
-//                retCode = ParseToDateTime(true);
-////                retCode = SerialParseToDateTime();
-//                if (retCode == CHECKDATATIME_OK)
-//                {
-//                    SetDS3231();
-//                    Serial.println("--- Well done, clock set! :)");
-//                }
-//                else
-//                {
-//                    Serial.println("*** ERROR parsing command!***");
-//                    Serial.println(checkDateDimeString[retCode].s);
-//                    Serial.println("check the command string");
-//                    Serial.println("must be in YY;MM;DD;hh:mm format");
-//                    Serial.println("and have valid values");
-//                }
-//                break;
-//        case SERIAL_CMD_ENABLE_LEDTEST: // controlla se e' in arrivo una stringa da 2 caratteri ET (Enable Test) oppure qualunque coppia di caratteri per disabilitare
-//                numLoop = 0;
-//                //SerialParseLedTestEnable();
-//                ParseLedTestEnable(true);
-//                break;
-//        case SERIAL_CMD_LIGHT_SET:
-////                if (!SerialParseSetLightLevel())
-//                if (!ParseSetLightLevel(true))
-//                {
-//                    Serial.println("*** ERROR parsing command!***");
-//                }
-//                else
-//                {
-//                    Serial.println("duty cycle uptated");
-//                }
-//                break;
-//        default:
-//                numLoop++;
-//                break;
-//    }
-//}
-
-/* ***************************************************************************************
-	Gestione dei comandi da seriale bluetooth
- * **************************************************************************************/
-//void ManageBluetoothCommand()
-//{
-//    static byte numLoop = 0;
-//    static byte maxLoop = 5;
-//    // controlli su seriale bluetooth
-////    int nc = bluetooth.available();
-//    int nc = CharAvailableOnSerial(false);
-//    if ((nc > SERIAL_CMD_MAX_LEN) || (numLoop > maxLoop))
-//    {
-//        numLoop = 0;
-////        while (bluetooth.available())
-//        while (CharAvailableOnSerial(false))
-//        {
-////            bluetooth.read();
-//            SerialRead(false);
-//        }
-//        char txt[64];
-//        sprintf(txt, "*@flushing %d chararacters", nc);
-//        bluetooth.println(txt);
-//    }
-//    switch (nc)
-//    {
-//        case SERIAL_CMD_SET_CLOCK: // acquisisce la stringa con data ed ora
-//                numLoop = 0;
-//                byte retCode;
-//                retCode = ParseToDateTime(false);
-////                retCode = SerialParseToDateTime();
-//                if (retCode == CHECKDATATIME_OK)
-//                {
-//                    SetDS3231();
-//                    bluetooth.println("*@--- Well done, clock set! :)");
-//                    Serial.println("--- Well done, clock set! :)");
-//                }
-//                else
-//                {
-//                    bluetooth.println("*@*** ERROR parsing command!***");
-//                    char txt[64];
-//                    sprintf(txt, "*@%s",checkDateDimeString[retCode].s);
-//                    bluetooth.println("*@check the command string");
-//                    bluetooth.println("*@must be in YY;MM;DD;hh:mm format");
-//                    bluetooth.println("*@and have valid values");
-//                }
-//                break;
-//        case SERIAL_CMD_ENABLE_LEDTEST: // controlla se e' in arrivo una stringa da 2 caratteri ET (Enable Test) oppure qualunque coppia di caratteri per disabilitare
-//                numLoop = 0;
-////                BluetoothParseLedTestEnable();
-//                ParseLedTestEnable(false);
-//                break;
-//        case SERIAL_CMD_HELP:
-//                numLoop = 0;
-//                BluetoothHelp();
-//        case SERIAL_CMD_LIGHT_SET:
-////                if (!BluetoothParseSetLightLevel())
-//                if (!ParseSetLightLevel(false))
-//                {
-//                    bluetooth.println("*@*** ERROR parsing command!***");
-//                }
-//                else
-//                {
-//                    bluetooth.println("*@duty cycle uptated");
-//                }
-//                break;
-//        default: if (nc > 0)
-//                {
-//                    numLoop++;
-//                }
-//                break;
-//    }
-//}
-
-/* ***************************************************************************************
-	Gestione dei comandi da tutte le seriali
- * **************************************************************************************/
-//void ManageAllSerialCommand()
-//{
-//    ManageSerialCommand();
-//    ManageBluetoothCommand();
-//}
-
 /* =======================================================================================
    =======================================================================================
 	Gestione HOUSE CLOCK
@@ -1746,55 +1470,8 @@ colonna = 3
     riga = 3   = 3 x 4 - 0 = 12  //	LED_8_UNI_MIN,   12   più significativo
                 
 */
-
-
 }
 
-/* =======================================================================================
-   =======================================================================================
-	MACCHINA A STATI GENERICA
-	****** la routine di cambio stato DEVE essere sempre definita! *******
-	le altre (pickup, stato e dropout) possono non essere definite
-   =======================================================================================
-   ======================================================================================= */
-void StateMachine(myStatus* pStatus, int& act_mode, int& past_mode)
-{
-	// controllo del cambio stato
-	act_mode = (*pStatus[act_mode].pChangeStatus)();
-
-	if (act_mode != past_mode)
-	{
-		// cambio stato
-		char txt[64];
-		sprintf (txt, "Change from %s to %s",
-					pStatus[past_mode].associateString,
-					pStatus[act_mode].associateString);
-		Serial.println(txt);
-
-		if (*pStatus[past_mode].pDropOut != nullptr)
-		{
-			(*pStatus[past_mode].pDropOut)();
-		}
-
-		past_mode = act_mode;
-
-		if (*pStatus[act_mode].pPickUp != nullptr)
-		{
-			(*pStatus[act_mode].pPickUp)();
-		}
-		pStatus[act_mode].msInStatus = 0;
-	}
-	else
-	{
-		// calcolo permanenza nello stato e gestione stato
-		pStatus[act_mode].msInStatus += MS_CYCLE;
-		pStatus[act_mode].bmaxMsInStatus = (Status[act_mode].msInStatus >= Status[act_mode].maxMsInStatus);
-		if (*pStatus[past_mode].pStatus != nullptr)
-		{
-			(*pStatus[act_mode].pStatus)();
-		}
-	}
-}
 
 /* ***************************************************************************************
 	Calcoli vari in funzione dei cicli:
@@ -1854,6 +1531,69 @@ void setup()
 
 	bluetooth.begin(9600);
 
+	States.AssignData(nullptr, 0);
+	
+	States.AssignState( 0, 
+						StandardModeStatus,
+						nullptr,
+						nullptr,
+						StandardModePickUp,
+						StandardModeChangeStatus,
+						0,
+						0,
+						"Standard"); 
+	
+	States.AssignState(	1, 
+						SetClockModeStatus,
+						SetClockModeDropOut,
+						nullptr,
+						SetClockModePickUp,
+						SetClockModeChangeStatus,
+						0,
+						0,
+						"SetClock"); 
+	
+	States.AssignState(	1, 
+						LedTestModeStatus,
+						nullptr,
+						nullptr,
+						LedTestModePickUp,
+						LedTestModeChangeStatus,
+						0,
+						0,
+						"TestLed"); 
+
+	SetClockSubStates.AssignData(nullptr, 0);
+	SetClockSubStates.AssignState( 0, 
+						SetHourStatus,
+						nullptr,
+						nullptr,
+						nullptr,
+						SetHourChangeStatus,
+						0,
+						0,
+						"SET_HOUR"); 
+	
+	SetClockSubStates.AssignState(	1, 
+						SetMinutesStatus,
+						nullptr,
+						nullptr,
+						SetMinutesPickUp,
+						SetMinutesChangeStatus,
+						0,
+						0,
+						"SET_MINUTES"); 
+	
+	SetClockSubStates.AssignState(	1, 
+						nullptr,
+						nullptr,
+						nullptr,
+						SetFinishPickUp,
+						SetFinishChangeStatus,
+						0,
+						0,
+						"SET_FINISH"); 
+						
 	byte    item;
 	myLed*  pLed  = &Led[0];
 	myPuls* pPuls = &Puls[0];
@@ -1905,13 +1645,14 @@ void loop()
 {
 	ManageCycleCounters();
 
-//	ManageAllSerialCommand();
 	ManageAllSerialCommand(USB_SERIAL);
 	ManageAllSerialCommand(BLUETOOTH_SERIAL);
 
 	ReadInput();
 
-	StateMachine(Status, (int&)mode, (int&)oldMode);
+	oldMode = States.GetStatusInd();
+	States.Manage();
+	mode = States.GetStatusInd();
 
 	WriteOutput();
 
